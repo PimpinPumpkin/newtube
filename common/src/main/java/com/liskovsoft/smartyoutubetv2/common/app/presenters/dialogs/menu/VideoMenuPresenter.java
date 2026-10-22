@@ -31,6 +31,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.menu.provide
 import com.liskovsoft.smartyoutubetv2.common.app.views.ChannelUploadsView;
 import com.liskovsoft.smartyoutubetv2.common.app.views.PlaybackView;
 import com.liskovsoft.smartyoutubetv2.common.misc.NetPath;
+import com.liskovsoft.smartyoutubetv2.common.misc.LocalPlaylists;
 import com.liskovsoft.smartyoutubetv2.common.misc.LocalWatchLater;
 import com.liskovsoft.smartyoutubetv2.common.misc.PhoneUi;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
@@ -40,6 +41,7 @@ import com.liskovsoft.smartyoutubetv2.common.prefs.BlockedChannelData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
 import com.liskovsoft.smartyoutubetv2.common.utils.AppDialogUtil;
+import com.liskovsoft.smartyoutubetv2.common.utils.LocalPlaylistSheet;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.disposables.Disposable;
@@ -164,7 +166,87 @@ public class VideoMenuPresenter extends BaseMenuPresenter {
         mVideo = video;
         sVideoHolder = new WeakReference<>(video);
 
+        // NEWTUBE(playlists): a phone playlist's card has its own short menu - the account rows
+        // (share, save, pin...) would all hand YouTube an id it has never seen.
+        if (LocalPlaylists.isLocalPlaylistCard(video)) {
+            showLocalPlaylistMenu();
+            return;
+        }
+
         MediaServiceManager.instance().authCheck(this::bootstrapPrepareAndShowDialogSigned, this::prepareAndShowDialogUnsigned);
+    }
+
+    /** NEWTUBE(playlists): Play all, Shuffle, Rename, Delete for a phone playlist. */
+    private void showLocalPlaylistMenu() {
+        Video card = mVideo;
+        VideoMenuCallback callback = mCallback;
+        LocalPlaylists playlists = LocalPlaylists.instance(getContext());
+        LocalPlaylists.LocalPlaylist playlist = playlists.get(card.playlistId);
+        if (playlist == null) {
+            return;
+        }
+
+        if (playlist.size() > 0) {
+            mDialogPresenter.appendSingleButton(UiOptionItem.from(
+                    getContext().getString(R.string.local_playlist_play_all),
+                    optionItem -> {
+                        mDialogPresenter.closeDialog();
+                        LocalPlaylists.play(getContext(), playlists.videos(playlist.id), null, false);
+                    }));
+            mDialogPresenter.appendSingleButton(UiOptionItem.from(
+                    getContext().getString(R.string.local_playlist_shuffle),
+                    optionItem -> {
+                        mDialogPresenter.closeDialog();
+                        LocalPlaylists.play(getContext(), playlists.videos(playlist.id), null, true);
+                    }));
+        }
+        mDialogPresenter.appendSingleButton(UiOptionItem.from(
+                getContext().getString(R.string.rename_playlist),
+                optionItem -> {
+                    mDialogPresenter.closeDialog();
+                    // The card's title is updated in place; the grid reads it again on refresh.
+                    LocalPlaylistSheet.showRenameDialog(getContext(), card,
+                            () -> BrowsePresenter.instance(getContext()).refresh(false));
+                }));
+        mDialogPresenter.appendSingleButton(UiOptionItem.from(
+                getContext().getString(R.string.local_playlist_delete),
+                optionItem -> AppDialogUtil.showConfirmationDialog(getContext(),
+                        getContext().getString(R.string.local_playlist_delete_confirm, playlist.title), () -> {
+                            playlists.delete(playlist.id);
+                            BrowsePresenter.instance(getContext()).onPlaylistEdited();
+                            if (callback != null) {
+                                callback.onItemAction(card, VideoMenuCallback.ACTION_REMOVE);
+                            }
+                            mDialogPresenter.closeDialog();
+                            MessageHelpers.showMessage(getContext(),
+                                    getContext().getString(R.string.local_playlist_deleted, playlist.title));
+                        })));
+
+        mDialogPresenter.showDialog(playlist.title);
+    }
+
+    /** NEWTUBE(playlists): a video listed in a phone playlist can leave it from its own menu. */
+    private void appendRemoveFromLocalPlaylistButton() {
+        Video video = mVideo;
+        if (video == null || video.localPlaylistId == null) {
+            return;
+        }
+        LocalPlaylists playlists = LocalPlaylists.instance(getContext());
+        LocalPlaylists.LocalPlaylist playlist = playlists.get(video.localPlaylistId);
+        if (playlist == null) {
+            return;
+        }
+        VideoMenuCallback callback = mCallback;
+        mDialogPresenter.appendSingleButton(UiOptionItem.from(
+                getContext().getString(R.string.dialog_remove_from, playlist.title),
+                optionItem -> {
+                    playlists.remove(playlist.id, video.videoId);
+                    BrowsePresenter.instance(getContext()).onPlaylistEdited();
+                    if (callback != null) {
+                        callback.onItemAction(video, VideoMenuCallback.ACTION_REMOVE_FROM_PLAYLIST);
+                    }
+                    mDialogPresenter.closeDialog();
+                }));
     }
 
     private void bootstrapPrepareAndShowDialogSigned() {
@@ -195,6 +277,8 @@ public class VideoMenuPresenter extends BaseMenuPresenter {
         if (getContext() == null) {
             return;
         }
+        // NEWTUBE(playlists): first, "Remove from" the phone playlist this card is listed in.
+        appendRemoveFromLocalPlaylistButton();
 
         appendReturnToBackgroundVideoButton();
 
@@ -216,6 +300,8 @@ public class VideoMenuPresenter extends BaseMenuPresenter {
         if (getContext() == null) {
             return;
         }
+        // NEWTUBE(playlists): first, "Remove from" the phone playlist this card is listed in.
+        appendRemoveFromLocalPlaylistButton();
 
         appendReturnToBackgroundVideoButton();
 

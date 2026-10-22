@@ -64,6 +64,7 @@ import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
+import com.liskovsoft.smartyoutubetv2.common.misc.LocalPlaylists;
 import com.liskovsoft.smartyoutubetv2.common.misc.LocalWatchLater;
 import com.liskovsoft.smartyoutubetv2.tv.BuildConfig;
 import com.liskovsoft.mediaserviceinterfaces.LiveChatService;
@@ -120,6 +121,7 @@ import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
 import com.liskovsoft.smartyoutubetv2.common.utils.AppDialogUtil;
 import com.liskovsoft.smartyoutubetv2.common.utils.ClickbaitRemover;
+import com.liskovsoft.smartyoutubetv2.common.utils.LocalPlaylistSheet;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.common.misc.VideoDownloads;
@@ -134,7 +136,6 @@ import com.newtube.mobile.ui.common.Haptics;
 import com.newtube.mobile.ui.common.MagneticDrag;
 import com.newtube.mobile.ui.common.MobileActivity;
 import com.newtube.mobile.ui.common.MobileSheets;
-import com.newtube.mobile.ui.common.MobileSnackbar;
 import com.newtube.mobile.ui.common.Motion;
 import com.newtube.mobile.ui.common.ThemeMode;
 import com.newtube.mobile.ui.common.ThemeRefresh;
@@ -1049,12 +1050,12 @@ public class MobilePlaybackActivity extends MobileActivity
         mWatchSubscribe.setOnClickListener(v -> onSubscribeTapped());
         mWatchShare.setOnClickListener(v -> shareCurrentVideo());
         // Save opens the same add/remove-from-playlist sheet as gear -> More -> Save to playlist.
-        // NEWTUBE(watch-later): signed out, Save keeps the video in the phone's Watch later.
+        // NEWTUBE(playlists): signed out, Save opens the phone's Save sheet.
         mWatchSave.setOnClickListener(v -> {
             if (YouTubeSignInService.instance().isSigned()) {
                 openPlayerOption(R.id.action_playlist_add, false);
             } else {
-                toggleLocalWatchLater();
+                openLocalSaveSheet();
             }
         });
         // Download: the quality picker, or the download's own menu once it is on the device.
@@ -7746,13 +7747,14 @@ public class MobilePlaybackActivity extends MobileActivity
      * bits not stored on the Video (channel avatar, clean view-count / date line).
      */
     /**
-     * NEWTUBE(watch-later): signed out, the Save pill says whether this video is in the phone's
-     * Watch later ({@link LocalWatchLater}); signed in, the shared controller sets it from the
+     * NEWTUBE(watch-later): signed out, the Save pill says whether this video is saved on the phone
+     * (Watch later or a phone playlist); signed in, the shared controller sets it from the
      * account's playlists.
      */
     /** Saved on the phone (signed-out use): the state the Save pill shows while signed out. */
     private boolean isSavedLocally(String videoId) {
-        return LocalWatchLater.instance(this).contains(videoId);
+        return LocalWatchLater.instance(this).contains(videoId)
+                || LocalPlaylists.instance(this).containsAnywhere(videoId);
     }
 
     private void updateLocalSaveState() {
@@ -7762,28 +7764,14 @@ public class MobilePlaybackActivity extends MobileActivity
         updateButtonVisual(R.id.action_playlist_add, isSavedLocally(mWatchVideo.videoId) ? BUTTON_ON : BUTTON_OFF);
     }
 
-    private void toggleLocalWatchLater() {
-        Video video = mWatchVideo;
-        if (!LocalWatchLater.canSave(video)) {
-            return;
+    /**
+     * NEWTUBE(playlists): signed out, Save opens the phone's Save sheet (Watch later and the phone's
+     * playlists); the pill reads Saved again when it closes.
+     */
+    private void openLocalSaveSheet() {
+        if (LocalWatchLater.canSave(mWatchVideo)) {
+            LocalPlaylistSheet.show(this, mWatchVideo, null, () -> runOnUiThread(this::updateLocalSaveState));
         }
-        LocalWatchLater watchLater = LocalWatchLater.instance(this);
-        boolean save = !watchLater.contains(video.videoId);
-        if (save) {
-            watchLater.add(video);
-        } else {
-            watchLater.remove(video.videoId);
-        }
-        updateLocalSaveState();
-        MobileSnackbar.show(this, getString(save ? R.string.saved_to_watch_later : R.string.removed_from_watch_later),
-                getString(R.string.mobile_undo), () -> {
-                    if (save) {
-                        watchLater.remove(video.videoId);
-                    } else {
-                        watchLater.add(video);
-                    }
-                    updateLocalSaveState();
-                });
     }
 
     private void bindWatchVideo(Video item) {

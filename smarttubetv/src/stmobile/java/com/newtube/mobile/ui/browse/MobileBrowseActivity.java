@@ -51,6 +51,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.YTSignInPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.AccountSettingsPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.views.BrowseView;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
+import com.liskovsoft.smartyoutubetv2.common.utils.LocalPlaylistSheet;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.common.misc.LocalWatchLater;
@@ -1637,8 +1638,14 @@ public class MobileBrowseActivity extends MobileActivity
      * later): nothing to page, no skeleton while it loads, and no snapshot in FeedCache.
      */
     private static boolean isLocalSection(int sectionId) {
-        return sectionId == VideoDownloads.SECTION_ID || sectionId == LocalWatchLater.SECTION_ID;
+        return sectionId == VideoDownloads.SECTION_ID || sectionId == LocalWatchLater.SECTION_ID
+                // NEWTUBE(playlists): signed out, Playlists lists the phone's own.
+                || (sectionId == MediaGroup.TYPE_USER_PLAYLISTS && LocalPlaylistSheet.applies());
     }
+
+    /** NEWTUBE(playlists): a sign-in finished while this screen is in front. */
+    private final MediaServiceManager.AccountChangeListener mCopyOfferListener =
+            account -> runOnUiThread(() -> LocalCopyOffer.maybeShow(this));
 
     private boolean isLocalSectionShowing() {
         return isLocalSection(mCurrentSectionId) && !mYouShowing;
@@ -1696,7 +1703,9 @@ public class MobileBrowseActivity extends MobileActivity
         mErrorContainer.setVisibility(View.VISIBLE);
         mErrorIcon.setVisibility(View.VISIBLE);
         mErrorMessage.setText(mCurrentSectionId == LocalWatchLater.SECTION_ID
-                ? R.string.mobile_watch_later_empty : R.string.mobile_downloads_empty);
+                ? R.string.mobile_watch_later_empty
+                : mCurrentSectionId == MediaGroup.TYPE_USER_PLAYLISTS
+                ? R.string.mobile_playlists_empty : R.string.mobile_downloads_empty);
         mErrorAction.setVisibility(View.GONE);
         mErrorAction.setTag(null);
     }
@@ -1871,6 +1880,9 @@ public class MobileBrowseActivity extends MobileActivity
         }
 
         updateAccountRow();
+        // NEWTUBE(playlists): just signed in with things saved on the phone: offer to copy them.
+        MediaServiceManager.instance().addAccountListener(mCopyOfferListener);
+        LocalCopyOffer.maybeShow(this);
         getWindow().getDecorView().postDelayed(mUpdateCheckIfDue, UPDATE_CHECK_DELAY_MS);
         // Cheap re-sync; listener callbacks already cover changes while resumed.
         updateCastIconTint();
@@ -1951,6 +1963,7 @@ public class MobileBrowseActivity extends MobileActivity
     @Override
     protected void onPause() {
         super.onPause();
+        MediaServiceManager.instance().removeAccountListener(mCopyOfferListener);
 
         if (mPresenter != null) {
             mPresenter.onViewPaused();

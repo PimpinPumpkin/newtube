@@ -39,6 +39,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.interfaces.SectionPr
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.interfaces.VideoGroupPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.views.BrowseView;
 import com.liskovsoft.smartyoutubetv2.common.misc.AppDataSourceManager;
+import com.liskovsoft.smartyoutubetv2.common.misc.LocalPlaylists;
 import com.liskovsoft.smartyoutubetv2.common.misc.LocalWatchLater;
 import com.liskovsoft.smartyoutubetv2.common.misc.VideoDownloads;
 import com.liskovsoft.smartyoutubetv2.common.misc.BrowseProcessorManager;
@@ -49,6 +50,7 @@ import com.liskovsoft.smartyoutubetv2.common.prefs.AccountsData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.BlockedChannelData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
+import com.liskovsoft.smartyoutubetv2.common.utils.LocalPlaylistSheet;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 
 import java.util.ArrayList;
@@ -912,6 +914,12 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
             Log.d(TAG, "Section %s is fresh — skipping refetch", section.getTitle());
             getView().showProgressBar(false);
             getView().onSectionContentCurrent(section.getId());
+            return;
+        }
+
+        // NEWTUBE(playlists): signed out, Playlists lists the phone's own (LocalPlaylists).
+        if (section.getId() == MediaGroup.TYPE_USER_PLAYLISTS && LocalPlaylistSheet.applies()) {
+            updateLocalGrid(section, () -> LocalPlaylists.instance(getContext()).cards(getContext()));
             return;
         }
 

@@ -31,6 +31,8 @@ public final class LocalWatchLater {
 
     private static final String PREFS_NAME = "newtube_watch_later";
     private static final String KEY_VIDEOS = "videos";
+    /** Saved since the last offer to copy the phone's lists to an account (LocalPlaylistsCopy). */
+    private static final String KEY_COPY_OFFER = "copy_offer_pending";
     /** Far more than anyone keeps; the oldest go first past it, so the file stays small. */
     private static final int MAX_VIDEOS = 2000;
 
@@ -86,6 +88,7 @@ public final class LocalWatchLater {
             videos.remove(videos.size() - 1);
         }
         persist();
+        mPrefs.edit().putBoolean(KEY_COPY_OFFER, true).apply();
     }
 
     public synchronized void remove(@Nullable String videoId) {
@@ -115,12 +118,30 @@ public final class LocalWatchLater {
         return videos().size();
     }
 
+    /** The saved videos, oldest first: the order to add them to an account's Watch later. */
+    @NonNull
+    public synchronized List<Video> oldestFirst() {
+        List<Video> result = new ArrayList<>();
+        for (int i = videos().size() - 1; i >= 0; i--) {
+            result.add(entryFor(videos().get(i)));
+        }
+        return result;
+    }
+
+    public boolean isCopyOfferPending() {
+        return mPrefs.getBoolean(KEY_COPY_OFFER, false);
+    }
+
+    public void setCopyOfferPending(boolean pending) {
+        mPrefs.edit().putBoolean(KEY_COPY_OFFER, pending).apply();
+    }
+
     /**
      * What is kept of a video: the card (title, channel, thumbnail, duration), not where it was
      * found. A playlist or a feed position would replay that context instead of this one video.
      */
     @NonNull
-    private static Video entryFor(@NonNull Video video) {
+    static Video entryFor(@NonNull Video video) {
         Video entry = new Video();
         entry.videoId = video.videoId;
         entry.title = video.title;

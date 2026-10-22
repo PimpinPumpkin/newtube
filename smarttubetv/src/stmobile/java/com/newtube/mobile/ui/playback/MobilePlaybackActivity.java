@@ -207,6 +207,11 @@ public class MobilePlaybackActivity extends MobileActivity
     @Nullable private View mOptionsRow;
     /** NEWTUBE(clock): the time in the fullscreen top bar, beside the title. */
     @Nullable private View mClockView;
+    /** NEWTUBE(autoplay): the top bar's Autoplay switch (AutoplaySwitch). */
+    @Nullable private com.google.android.material.switchmaterial.SwitchMaterial mAutoplaySwitch;
+    private boolean mSyncingAutoplay;
+    /** NEWTUBE(speed): the top bar's current-speed chip; a tap opens the speed sheet. */
+    @Nullable private TextView mSpeedChip;
     /** Over the top of the video: "Release to cancel" (seek bar). */
     @Nullable private TextView mTopPill;
     /** NEWTUBE(gestures): brightness / volume while a side swipe sets it (SwipeLevels). */
@@ -693,6 +698,20 @@ public class MobilePlaybackActivity extends MobileActivity
         mTransport = findViewById(R.id.mobile_player_transport);
         mOptionsRow = findViewById(R.id.mobile_player_options);
         mClockView = findViewById(R.id.mobile_player_clock);
+        mAutoplaySwitch = findViewById(R.id.mobile_player_autoplay);
+        mSpeedChip = findViewById(R.id.mobile_player_speed_chip);
+        if (mAutoplaySwitch != null) {
+            syncAutoplaySwitch();
+            mAutoplaySwitch.setOnCheckedChangeListener((button, on) -> {
+                if (!mSyncingAutoplay) { // the user's flip, not syncAutoplaySwitch()
+                    onAutoplayFlipped(on);
+                }
+            });
+        }
+        if (mSpeedChip != null) {
+            updateSpeedChip();
+            mSpeedChip.setOnClickListener(v -> showSpeedSheet());
+        }
         if (mOptionsRow != null && mTitleView != null) {
             // NEWTUBE(clock): the title stops before the options row however wide it is (the clock
             // widens it in fullscreen), never under it; 148dp is the room the three buttons need.
@@ -3553,6 +3572,9 @@ public class MobilePlaybackActivity extends MobileActivity
         }
         mTimeBar.setShown(true, animate);
         updatePlayPauseIcon();
+        // NEWTUBE(autoplay, speed): Settings or the gear may have changed either meanwhile.
+        syncAutoplaySwitch();
+        updateSpeedChip();
 
         // NEWTUBE(perf): drive the 500ms progress loop only while controls are visible. startProgress
         // ticks once immediately (refresh on show) then reschedules every 500ms.
@@ -8906,6 +8928,37 @@ public class MobilePlaybackActivity extends MobileActivity
     @Override
     public void setSpeed(float speed) {
         mExoPlayerController.setSpeed(speed);
+        runOnUiThread(this::updateSpeedChip); // the shared controllers set it too (per-video speed)
+    }
+
+    /** NEWTUBE(speed): "1x", "1.5x" in the top bar, read from the player. */
+    private void updateSpeedChip() {
+        if (mSpeedChip != null) {
+            String label = currentSpeedLabel();
+            mSpeedChip.setText(label);
+            mSpeedChip.setContentDescription(getString(R.string.mobile_speed_toast, label));
+        }
+    }
+
+    /** NEWTUBE(autoplay): the switch shows the stored mode (the gear's Repeat mode changes it too). */
+    private void syncAutoplaySwitch() {
+        if (mAutoplaySwitch != null) {
+            boolean on = AutoplaySwitch.isOn(this);
+            if (mAutoplaySwitch.isChecked() != on) {
+                mSyncingAutoplay = true;
+                mAutoplaySwitch.setChecked(on);
+                mSyncingAutoplay = false;
+            }
+        }
+    }
+
+    private void onAutoplayFlipped(boolean on) {
+        int mode = AutoplaySwitch.set(this, on);
+        setButtonState(R.id.action_repeat, mode);
+        armAutoHide();
+        com.google.android.material.snackbar.Snackbar.make(findViewById(android.R.id.content),
+                on ? R.string.mobile_autoplay_on : R.string.mobile_autoplay_off,
+                com.google.android.material.snackbar.Snackbar.LENGTH_SHORT).show();
     }
 
     @Override

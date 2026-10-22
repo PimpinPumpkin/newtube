@@ -172,6 +172,39 @@
                         android:visibility="gone"
                         tools:visibility="visible" />
 
+                    <!-- NEWTUBE(autoplay): YouTube's Autoplay switch (AutoplaySwitch). Off = a video
+                         on its own stops at its end; playlists and the queue still play on. -->
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/mobile_player_autoplay"
+                        android:layout_width="wrap_content"
+                        android:layout_height="@dimen/mobile_player_icon_button"
+                        android:contentDescription="@string/mobile_player_autoplay"
+                        android:minWidth="0dp"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp"
+                        android:scaleX="0.85"
+                        android:scaleY="0.85" />
+
+                    <!-- NEWTUBE(speed): the current speed ("1x", "1.5x"); a tap opens the speed sheet. -->
+                    <TextView
+                        android:id="@+id/mobile_player_speed_chip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="@dimen/mobile_player_icon_button"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/mobile_player_speed"
+                        android:gravity="center"
+                        android:minWidth="@dimen/mobile_player_icon_button"
+                        android:paddingStart="6dp"
+                        android:paddingEnd="6dp"
+                        android:shadowColor="#80000000"
+                        android:shadowDx="0"
+                        android:shadowDy="1"
+                        android:shadowRadius="3"
+                        android:textColor="@android:color/white"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        tools:text="1.5x" />
+
                     <!-- Cast picker (casting wave): lists DIAL-discovered TVs + paired screens.
                          Route B only for now; see com.newtube.mobile.casting. -->
                     <ImageButton

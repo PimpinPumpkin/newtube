@@ -14,7 +14,7 @@
   rounded top + drag handle and sizes to its content (capped by MaxHeightRecyclerView). The
   phone Settings have their own screen (com.newtube.mobile.ui.settings) since 1.15.
 -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.newtube.mobile.ui.dialog.SheetDragFrame xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/mobile_dialog_root"
     android:layout_width="match_parent"
@@ -90,4 +90,4 @@
 
     </LinearLayout>
 
-</FrameLayout>
+</com.newtube.mobile.ui.dialog.SheetDragFrame>

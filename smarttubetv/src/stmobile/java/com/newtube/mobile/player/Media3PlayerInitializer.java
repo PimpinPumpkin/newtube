@@ -430,6 +430,23 @@ public class Media3PlayerInitializer {
                 && "0".equals(DebugMediaShaper.prop("debug.arc.keep_codec")));
     }
 
+    /** NEWTUBE(audio-buffer): see {@code PrerollRenderersFactory.buildAudioSink}. */
+    static final int AUDIO_TRACK_MIN_BUFFER_US = 500_000;
+    /** media3's own ceiling is 750 ms; the floor above must stay under it. */
+    static final int AUDIO_TRACK_MAX_BUFFER_US = 1_000_000;
+
+    /** {@link #AUDIO_TRACK_MIN_BUFFER_US}; debug/benchmark builds take {@code debug.arc.audio_buffer_ms} (100-2000). */
+    static int audioTrackMinBufferUs() {
+        if (com.liskovsoft.smartyoutubetv2.tv.BuildConfig.DEBUG
+                || com.liskovsoft.smartyoutubetv2.tv.BuildConfig.BENCHMARK) {
+            int ms = DebugMediaShaper.propInt("debug.arc.audio_buffer_ms", 0);
+            if (ms > 0) {
+                return Math.max(100, Math.min(2_000, ms)) * 1000;
+            }
+        }
+        return AUDIO_TRACK_MIN_BUFFER_US;
+    }
+
     /** Always on in release; debug/benchmark builds can compare with {@code debug.arc.opus_preroll=0}. */
     static boolean opusPrerollSkipEnabled() {
         return !((com.liskovsoft.smartyoutubetv2.tv.BuildConfig.DEBUG
@@ -479,6 +496,40 @@ public class Media3PlayerInitializer {
         }
 
         private static int sDebugDecoderFailuresLeft = 4;
+
+        /**
+         * NEWTUBE(audio-buffer): the stock sink with a larger AudioTrack buffer: at least
+         * {@link #AUDIO_TRACK_MIN_BUFFER_US} instead of media3's 250 ms floor. Since media3 1.8 the
+         * audio renderer reports not-ready on any AudioTrack underrun (the framework's own underrun
+         * count), so a short underrun puts the player in BUFFERING at once: a flash of the spinner
+         * and an audible pop (androidx/media#3210; 1.11 adds a 100 ms grace for it). On phones
+         * whose minimum AudioTrack buffer is small, the 250 ms floor is what they get, and
+         * pitch-preserving speed-up (Sonic time-stretching at 2x and up) underruns it - with
+         * time-stretching off the same speed played clean. 500 ms is the fixed duration the
+         * media3 maintainers proposed as the new default. The cost: a speed change (Sonic runs
+         * ahead of the AudioTrack) is heard up to ~250 ms later than before; volume is not delayed
+         * (AudioTrack.setVolume). Debug/benchmark A/B:
+         * {@code debug.arc.audio_buffer_ms} (250 = media3's floor).
+         */
+        @Override
+        protected androidx.media3.exoplayer.audio.AudioSink buildAudioSink(Context context,
+                boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
+            int minBufferUs = audioTrackMinBufferUs();
+            NetPath.log("audio-buffer min=" + (minBufferUs / 1000) + "ms");
+            androidx.media3.exoplayer.audio.DefaultAudioTrackBufferSizeProvider bufferSize =
+                    new androidx.media3.exoplayer.audio.DefaultAudioTrackBufferSizeProvider.Builder()
+                            .setMinPcmBufferDurationUs(minBufferUs)
+                            .setMaxPcmBufferDurationUs(Math.max(minBufferUs, AUDIO_TRACK_MAX_BUFFER_US))
+                            .build();
+            return new androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                    .setAudioOutputProvider(
+                            new androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider.Builder(context)
+                                    .setAudioTrackBufferSizeProvider(bufferSize)
+                                    .build())
+                    .build();
+        }
 
         @Override
         protected void buildAudioRenderers(Context context, int extensionRendererMode,

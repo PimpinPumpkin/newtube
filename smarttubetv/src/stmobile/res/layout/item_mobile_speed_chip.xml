@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- NEWTUBE(speed-sheet): one preset pill in the speed sheet's row; equal shares of the width. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="0dp"
+    android:layout_height="36dp"
+    android:layout_marginHorizontal="3dp"
+    android:layout_marginVertical="6dp"
+    android:layout_weight="1"
+    android:background="@drawable/bg_mobile_speed_chip"
+    android:clickable="true"
+    android:focusable="true"
+    android:fontFamily="sans-serif-medium"
+    android:gravity="center"
+    android:maxLines="1"
+    android:textColor="@color/mobile_speed_chip_text"
+    android:textSize="14sp"
+    tools:text="1.25x" />

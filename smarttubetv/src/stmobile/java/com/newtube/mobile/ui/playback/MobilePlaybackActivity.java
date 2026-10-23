@@ -7601,12 +7601,13 @@ public class MobilePlaybackActivity extends MobileActivity
     }
 
     // ---------------------------------------------------------------------------------
-    // Playback speed: native preset sheet, classic official-app anatomy (0.25x..2x flat
-    // list, leading check). The exhaustive TV dialog (0.25-4x list +
+    // Playback speed: touch sheet (sheet_mobile_speed) - large value, slider between -/+
+    // steps, preset pills, and pitch below. The exhaustive TV dialog (0.25-4x list +
     // remember-speed options) stays reachable behind "More speeds".
     // ---------------------------------------------------------------------------------
 
-    private static final float[] SPEED_PRESETS = {0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f};
+    /** The speed sheet's preset pills. */
+    private static final float[] SPEED_CHIPS = {0.5f, 1.0f, 1.25f, 1.5f, 2.0f, 3.0f};
 
     /** "1x", "1.5x", "0.25x": the same form for every speed, 1x included (it read "Normal"). */
     private String speedLabel(float speed) {
@@ -7628,13 +7629,8 @@ public class MobilePlaybackActivity extends MobileActivity
         View content = getLayoutInflater().inflate(R.layout.sheet_mobile_speed, null);
         dialog.setContentView(content);
 
-        LinearLayout list = content.findViewById(R.id.speed_sheet_list);
-        for (float speed : SPEED_PRESETS) {
-            addQualityRow(list, speedLabel(speed), Helpers.floatEquals(speed, current), () -> {
-                applySpeed(speed);
-                dialog.dismiss();
-            });
-        }
+        bindSpeedControls(content, current);
+        bindPitchControls(content);
 
         // Full TV speed dialog: extended 0.25-4x list (long-click path always opens the list).
         content.findViewById(R.id.speed_sheet_more).setOnClickListener(v -> {
@@ -7648,9 +7644,143 @@ public class MobilePlaybackActivity extends MobileActivity
     }
 
     /**
+     * NEWTUBE(speed-sheet): the speed half of the sheet. A drag shows the speed under the thumb and
+     * applies it on release (no re-buffer per notch); the -/+ buttons, the pills and a TalkBack
+     * adjustment (a change from the user with no drag in progress) apply at once. The sheet stays
+     * open, so the large value is the confirmation - no snackbar.
+     */
+    private void bindSpeedControls(View content, float current) {
+        TextView value = content.findViewById(R.id.speed_sheet_value);
+        com.google.android.material.slider.Slider slider = content.findViewById(R.id.speed_sheet_slider);
+        LinearLayout chips = content.findViewById(R.id.speed_sheet_chips);
+        boolean[] dragging = {false};
+        float[] speed = {current};
+        Runnable[] show = new Runnable[1];
+
+        java.util.function.Consumer<Float> pick = picked -> {
+            speed[0] = picked;
+            applySpeed(picked);
+            show[0].run();
+        };
+        show[0] = () -> {
+            value.setText(speedLabel(speed[0]));
+            slider.setValue(SpeedSteps.snapSpeed(speed[0]));
+            for (int i = 0; i < chips.getChildCount(); i++) {
+                View chip = chips.getChildAt(i);
+                chip.setSelected(Helpers.floatEquals((Float) chip.getTag(), speed[0]));
+            }
+        };
+
+        slider.setLabelFormatter(this::speedLabel);
+        slider.addOnChangeListener((s, picked, fromUser) -> {
+            if (!fromUser) {
+                return;
+            }
+            float rounded = SpeedSteps.round2(picked);
+            if (dragging[0]) {
+                value.setText(speedLabel(rounded));
+            } else {
+                pick.accept(rounded);
+            }
+        });
+        slider.addOnSliderTouchListener(new com.google.android.material.slider.Slider.OnSliderTouchListener() {
+            @Override
+            public void onStartTrackingTouch(@NonNull com.google.android.material.slider.Slider s) {
+                dragging[0] = true;
+            }
+
+            @Override
+            public void onStopTrackingTouch(@NonNull com.google.android.material.slider.Slider s) {
+                dragging[0] = false;
+                pick.accept(SpeedSteps.round2(s.getValue()));
+            }
+        });
+        content.findViewById(R.id.speed_sheet_slower).setOnClickListener(
+                v -> pick.accept(SpeedSteps.stepSpeed(speed[0], -1)));
+        content.findViewById(R.id.speed_sheet_faster).setOnClickListener(
+                v -> pick.accept(SpeedSteps.stepSpeed(speed[0], 1)));
+
+        for (float preset : SPEED_CHIPS) {
+            TextView chip = (TextView) getLayoutInflater().inflate(R.layout.item_mobile_speed_chip, chips, false);
+            chip.setText(speedLabel(preset));
+            chip.setTag(preset);
+            chip.setOnClickListener(v -> pick.accept(preset));
+            chips.addView(chip);
+        }
+
+        show[0].run();
+    }
+
+    /**
+     * NEWTUBE(speed-sheet): pitch, 50%..200% in 5% steps, saved like the TV "Pitch effect" list
+     * (one global pitch, PlayerData). Shown only while audio time-stretching is on: with it off a
+     * speed change sets the pitch to the speed, so a pitch of its own would not hold.
+     */
+    private void bindPitchControls(View content) {
+        View section = content.findViewById(R.id.speed_sheet_pitch);
+        if (mExoPlayerController == null
+                || !PlayerTweaksData.instance(this).isAudioTimeStretchingEnabled()) {
+            section.setVisibility(View.GONE);
+            return;
+        }
+        TextView value = content.findViewById(R.id.speed_sheet_pitch_value);
+        com.google.android.material.slider.Slider slider = content.findViewById(R.id.speed_sheet_pitch_slider);
+        View reset = content.findViewById(R.id.speed_sheet_pitch_reset);
+        int[] percent = {SpeedSteps.pitchPercent(mExoPlayerController.getPitch())};
+        boolean[] dragging = {false};
+        Runnable[] show = new Runnable[1];
+
+        java.util.function.IntConsumer pick = picked -> {
+            percent[0] = picked;
+            float pitch = SpeedSteps.pitchOf(picked);
+            setPitch(pitch);
+            PlayerData.instance(this).setPitch(pitch);
+            show[0].run();
+        };
+        show[0] = () -> {
+            value.setText(getString(R.string.mobile_pitch_value, percent[0]));
+            slider.setValue(percent[0]);
+            reset.setEnabled(percent[0] != 100);
+            reset.setAlpha(percent[0] != 100 ? 1f : 0.4f);
+        };
+
+        slider.setLabelFormatter(v -> getString(R.string.mobile_pitch_value, Math.round(v)));
+        slider.addOnChangeListener((s, picked, fromUser) -> {
+            if (!fromUser) {
+                return;
+            }
+            if (dragging[0]) {
+                value.setText(getString(R.string.mobile_pitch_value, Math.round(picked)));
+            } else {
+                pick.accept(Math.round(picked));
+            }
+        });
+        slider.addOnSliderTouchListener(new com.google.android.material.slider.Slider.OnSliderTouchListener() {
+            @Override
+            public void onStartTrackingTouch(@NonNull com.google.android.material.slider.Slider s) {
+                dragging[0] = true;
+            }
+
+            @Override
+            public void onStopTrackingTouch(@NonNull com.google.android.material.slider.Slider s) {
+                dragging[0] = false;
+                pick.accept(Math.round(s.getValue()));
+            }
+        });
+        content.findViewById(R.id.speed_sheet_pitch_lower).setOnClickListener(
+                v -> pick.accept(SpeedSteps.stepPitch(percent[0], -1)));
+        content.findViewById(R.id.speed_sheet_pitch_higher).setOnClickListener(
+                v -> pick.accept(SpeedSteps.stepPitch(percent[0], 1)));
+        reset.setOnClickListener(v -> pick.accept(100));
+
+        show[0].run();
+    }
+
+    /**
      * Apply a speed pick. The engine change fires onSpeedChanged, which VideoStateController
      * already persists (global/per-channel memory); only the per-video State save - the TV
-     * dialog's close hook - needs mirroring here. Confirms via snackbar, same as captions.
+     * dialog's close hook - needs mirroring here. No snackbar: the sheet stays open and its
+     * large value already says the new speed.
      */
     private void applySpeed(float speed) {
         setSpeed(speed);
@@ -7663,12 +7793,6 @@ public class MobilePlaybackActivity extends MobileActivity
                 stateService.save(new State(state.video, state.positionMs, state.durationMs, speed));
             }
         }
-
-        com.google.android.material.snackbar.Snackbar.make(
-                        findViewById(android.R.id.content),
-                        getString(R.string.mobile_speed_toast, speedLabel(speed)),
-                        com.google.android.material.snackbar.Snackbar.LENGTH_SHORT)
-                .show();
     }
 
     private void onCommentsEntryClicked() {

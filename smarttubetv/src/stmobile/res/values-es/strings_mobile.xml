@@ -65,6 +65,13 @@
     <string name="mobile_speed_normal">Normal</string>
     <string name="mobile_speed_more">Más velocidades</string>
     <string name="mobile_speed_toast">Velocidad de reproducción: %1$s</string>
+    <string name="mobile_speed_slower">Más lento</string>
+    <string name="mobile_speed_faster">Más rápido</string>
+    <string name="mobile_pitch">Tono</string>
+    <string name="mobile_pitch_value">%1$d%%</string>
+    <string name="mobile_pitch_lower">Bajar el tono</string>
+    <string name="mobile_pitch_higher">Subir el tono</string>
+    <string name="mobile_pitch_reset">Restablecer</string>
 
     <!-- Accounts sheet -->
     <string name="mobile_accounts_title">Cuentas</string>

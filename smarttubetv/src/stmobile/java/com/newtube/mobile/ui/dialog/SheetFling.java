@@ -50,6 +50,15 @@ final class SheetFling {
         return (target - offset) * (end - offset) > 0f && Math.abs(end - offset) >= Math.abs(target - offset);
     }
 
+    /**
+     * Where a drag puts the sheet: {@code base} (its offset when the drag began) plus the finger's
+     * travel {@code dy}, 1:1. Up past open it resists; down it stops at closed, the most a
+     * release's fling can start from.
+     */
+    static float dragOffset(float base, float dy, float sheetHeight) {
+        return Math.min(rubberBand(base + dy, sheetHeight), sheetHeight);
+    }
+
     /** Upward drag past open resists: the sheet moves a fraction of the finger, like a rubber band. */
     static float rubberBand(float overshoot, float sheetHeight) {
         if (overshoot >= 0f) {

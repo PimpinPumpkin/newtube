@@ -1,7 +1,6 @@
 package com.newtube.mobile.ui.dialog;
 
 import android.content.Context;
-import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -36,10 +35,14 @@ public class SheetDragFrame extends FrameLayout {
     @Nullable private VelocityTracker mTracker;
     private float mDownX;
     private float mDownY;
+    /** The finger that drives the drag; a second one changes nothing until this one lifts. */
+    private int mActivePointerId = MotionEvent.INVALID_POINTER_ID;
+    /** The travel last handed to {@link Listener#onDrag}. */
+    private float mDragDy;
     private boolean mDownOnSheet;
     private boolean mDownOnHeader;
     private boolean mDragging;
-    private final Rect mRect = new Rect();
+    private final int[] mAt = new int[2];
 
     public SheetDragFrame(@NonNull Context context) {
         this(context, null);
@@ -66,6 +69,7 @@ public class SheetDragFrame extends FrameLayout {
         }
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                mActivePointerId = event.getPointerId(0);
                 mDownX = event.getX();
                 mDownY = event.getY();
                 mDownOnSheet = contains(mSheet, event);
@@ -78,8 +82,12 @@ public class SheetDragFrame extends FrameLayout {
                 if (!mDownOnSheet || event.getPointerCount() > 1) {
                     return false;
                 }
-                float dy = event.getY() - mDownY;
-                float dx = event.getX() - mDownX;
+                int index = event.findPointerIndex(mActivePointerId);
+                if (index < 0) {
+                    return false;
+                }
+                float dy = event.getY(index) - mDownY;
+                float dx = event.getX(index) - mDownX;
                 if (Math.abs(dy) < mTouchSlop || Math.abs(dy) < Math.abs(dx)) {
                     return false;
                 }
@@ -88,7 +96,8 @@ public class SheetDragFrame extends FrameLayout {
                 if (mDownOnHeader || (dy > 0 && listAtTop)) {
                     mDragging = true;
                     // Start from here, not from the down point: no jump by the slop.
-                    mDownY = event.getY();
+                    mDownY = event.getY(index);
+                    mDragDy = 0f;
                     getParent().requestDisallowInterceptTouchEvent(true);
                     return true;
                 }
@@ -110,14 +119,31 @@ public class SheetDragFrame extends FrameLayout {
         }
         track(event);
         switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_MOVE:
-                mListener.onDrag(event.getY() - mDownY);
+            case MotionEvent.ACTION_MOVE: {
+                // The drag's own finger, not pointer 0: that one is whichever finger came first.
+                int index = event.findPointerIndex(mActivePointerId);
+                if (index >= 0) {
+                    mDragDy = event.getY(index) - mDownY;
+                    mListener.onDrag(mDragDy);
+                }
                 return true;
+            }
+            case MotionEvent.ACTION_POINTER_UP: {
+                // The drag's finger lifted with another still down: that one takes over from where
+                // the sheet is, so the sheet doesn't jump to it.
+                int index = event.getActionIndex();
+                if (event.getPointerId(index) == mActivePointerId) {
+                    int other = index == 0 ? 1 : 0;
+                    mActivePointerId = event.getPointerId(other);
+                    mDownY = event.getY(other) - mDragDy;
+                }
+                return true;
+            }
             case MotionEvent.ACTION_UP: {
                 float velocity = 0f;
                 if (mTracker != null) {
                     mTracker.computeCurrentVelocity(1000, mMaxFling);
-                    velocity = mTracker.getYVelocity();
+                    velocity = mTracker.getYVelocity(mActivePointerId);
                 }
                 mDragging = false;
                 stopTracking();
@@ -134,15 +160,18 @@ public class SheetDragFrame extends FrameLayout {
         }
     }
 
+    // Screen coordinates on both sides, like the raw touch: getGlobalVisibleRect() is the window's,
+    // which is off by the window's position in split screen and freeform.
     private boolean contains(@NonNull View view, @NonNull MotionEvent event) {
-        view.getGlobalVisibleRect(mRect);
-        return mRect.contains((int) event.getRawX(), (int) event.getRawY());
+        view.getLocationOnScreen(mAt);
+        float x = event.getRawX();
+        float y = event.getRawY();
+        return x >= mAt[0] && x < mAt[0] + view.getWidth() && y >= mAt[1] && y < mAt[1] + view.getHeight();
     }
 
     private float top(@NonNull View view) {
-        int[] at = new int[2];
-        view.getLocationOnScreen(at);
-        return at[1];
+        view.getLocationOnScreen(mAt);
+        return mAt[1];
     }
 
     // Velocity is tracked in screen coordinates: the sheet moves under the finger as it is dragged,

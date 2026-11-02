@@ -42,6 +42,21 @@ public class SheetFlingTest {
     }
 
     @Test
+    public void aDragFollowsTheFingerExactly() {
+        // Every move counts from where the drag began, so the sheet never gets ahead of the finger.
+        assertEquals(30f, SheetFling.dragOffset(0f, 30f, HEIGHT), 0.001f);
+        assertEquals(90f, SheetFling.dragOffset(0f, 90f, HEIGHT), 0.001f);
+        // Caught mid-slide 200 px down: from there, 1:1 both ways.
+        assertEquals(350f, SheetFling.dragOffset(200f, 150f, HEIGHT), 0.001f);
+        assertEquals(120f, SheetFling.dragOffset(200f, -80f, HEIGHT), 0.001f);
+    }
+
+    @Test
+    public void aDragStopsAtClosed() {
+        assertEquals(HEIGHT, SheetFling.dragOffset(900f, 800f, HEIGHT), 0.001f);
+    }
+
+    @Test
     public void pullingUpPastOpenResists() {
         assertEquals(50f, SheetFling.rubberBand(50f, HEIGHT), 0.001f);
         float up = SheetFling.rubberBand(-400f, HEIGHT);

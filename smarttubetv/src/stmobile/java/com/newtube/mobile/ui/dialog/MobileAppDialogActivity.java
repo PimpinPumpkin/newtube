@@ -1,5 +1,6 @@
 package com.newtube.mobile.ui.dialog;
 
+import android.annotation.SuppressLint;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Build;
@@ -8,6 +9,7 @@ import android.os.Parcelable;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.view.ViewGroup;
@@ -248,6 +250,7 @@ public class MobileAppDialogActivity extends MobileActivity implements AppDialog
         mPresenter.onViewInitialized();
     }
 
+    @SuppressLint("ClickableViewAccessibility") // the sheet's touch listener only claims the down
     private void bindViews() {
         mRoot = findViewById(R.id.mobile_dialog_root);
         mScrim = findViewById(R.id.mobile_dialog_scrim);
@@ -260,6 +263,11 @@ public class MobileAppDialogActivity extends MobileActivity implements AppDialog
 
         // Sheet mode: tapping the dim scrim dismisses the whole dialog (like a Material sheet).
         mScrim.setOnClickListener(v -> dismissSheet());
+        // NEWTUBE(sheet-drag): the sheet keeps its own touches. Nothing on its handle, title or
+        // bottom inset takes the down, so a tap there fell through to the scrim and closed the
+        // sheet, and so did a sideways swipe on the header. A touch listener, not a click one:
+        // TalkBack must not announce the whole sheet as a button.
+        mContent.setOnTouchListener((v, event) -> event.getActionMasked() == MotionEvent.ACTION_DOWN);
 
         ViewCompat.setOnApplyWindowInsetsListener(mRoot, (view, windowInsets) -> {
             mSystemInsets = windowInsets.getInsets(
@@ -518,13 +526,16 @@ public class MobileAppDialogActivity extends MobileActivity implements AppDialog
             return;
         }
         if (!mDragActive) {
-            mDragActive = true;
+            // Cancel before setting the flag: cancelDragAnim() clears it, and a cleared flag made
+            // every move re-read the base from the already moved sheet and add the whole travel
+            // again, so the sheet ran away from the finger.
             cancelDragAnim();
+            mDragActive = true;
             mContent.animate().cancel(); // a drag can catch the sheet mid-entrance
             mScrim.animate().cancel();
             mDragBase = mContent.getTranslationY();
         }
-        setSheetOffset(SheetFling.rubberBand(mDragBase + dy, mContent.getHeight()));
+        setSheetOffset(SheetFling.dragOffset(mDragBase, dy, mContent.getHeight()));
     }
 
     /**
@@ -539,7 +550,8 @@ public class MobileAppDialogActivity extends MobileActivity implements AppDialog
         }
         float offset = mContent.getTranslationY();
         float height = mContent.getHeight();
-        float density = getResources().getDisplayMetrics().density;
+        // The system density, not this activity's: that carries the UI scale override (CLAUDE.md).
+        float density = getApplicationContext().getResources().getConfiguration().densityDpi / 160f;
         if (SheetFling.closes(offset, velocity, height, density)) {
             closeByDrag(offset, velocity, height);
         } else {
@@ -556,11 +568,12 @@ public class MobileAppDialogActivity extends MobileActivity implements AppDialog
         Runnable done = this::finishAfterExit;
         if (SheetFling.coastsTo(offset, velocity, height)) {
             // No spring snap: the sheet rides the throw's inertia and the screen edge stops it.
+            // The bounds hold the start value: FlingAnimation.start() throws outside them.
             FlingAnimation fling = new FlingAnimation(mContent, DynamicAnimation.TRANSLATION_Y)
                     .setStartVelocity(velocity)
                     .setFriction(SheetFling.FRICTION)
                     .setMinValue(Math.min(offset, 0f))
-                    .setMaxValue(height);
+                    .setMaxValue(Math.max(offset, height));
             fling.addUpdateListener((anim, value, v) -> followScrim(value));
             fling.addEndListener((anim, canceled, value, v) -> {
                 if (canceled) {
@@ -692,6 +705,8 @@ public class MobileAppDialogActivity extends MobileActivity implements AppDialog
         if (isChangingConfigurations() && !mLevels.isEmpty()) {
             sRecreation = new RecreationState(new ArrayList<>(mLevels), new HashMap<>(mRadioOverrides), mIsTransparent);
         }
+        // NEWTUBE(sheet-drag): a spring or fling still running would finish a destroyed activity.
+        cancelDragAnim();
 
         super.onDestroy();
     }

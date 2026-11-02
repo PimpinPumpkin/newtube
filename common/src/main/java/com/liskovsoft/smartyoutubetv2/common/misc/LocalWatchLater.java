@@ -34,6 +34,8 @@ public final class LocalWatchLater {
     private static final String KEY_VIDEOS = "videos";
     /** The last saved list that couldn't be read in full, as it was (see {@link #videos()}). */
     private static final String KEY_DAMAGED = "videos_damaged";
+    /** How many times a video was saved, ever ({@link #saves}). */
+    private static final String KEY_SAVES = "saves";
     /** Far more than anyone keeps; the oldest go first past it, so the file stays small. */
     public static final int MAX_VIDEOS = 2000;
 
@@ -96,6 +98,7 @@ public final class LocalWatchLater {
             madeRoom = true;
         }
         persist();
+        mPrefs.edit().putLong(KEY_SAVES, saves() + 1).apply();
         return madeRoom;
     }
 
@@ -133,12 +136,30 @@ public final class LocalWatchLater {
         return videos().size();
     }
 
+    /** The saved videos, oldest first: the order to add them to an account's Watch later. */
+    @NonNull
+    public synchronized List<Video> oldestFirst() {
+        List<Video> result = new ArrayList<>();
+        for (int i = videos().size() - 1; i >= 0; i--) {
+            result.add(entryFor(videos().get(i)));
+        }
+        return result;
+    }
+
+    /**
+     * How many times a video was saved, ever. It only grows, so "saved anything since?" is a
+     * comparison ({@link LocalPlaylistsCopy#whatToOffer}).
+     */
+    public long saves() {
+        return mPrefs.getLong(KEY_SAVES, 0);
+    }
+
     /**
      * What is kept of a video: the card (title, channel, thumbnail, duration), not where it was
      * found. A playlist or a feed position would replay that context instead of this one video.
      */
     @NonNull
-    private static Video entryFor(@NonNull Video video) {
+    static Video entryFor(@NonNull Video video) {
         Video entry = new Video();
         entry.videoId = video.videoId;
         entry.title = video.title;

@@ -9,7 +9,8 @@
   Filled in MobilePlaybackActivity.showSpeedSheet().
 
   NEWTUBE(sheet-landscape): handle, title and hairline stay put and only the body scrolls - held
-  sideways, the player caps the sheet below the top edge.
+  sideways, the player caps the sheet below the top edge. There speed and pitch sit side by side,
+  so the whole sheet fits under that cap and nothing is cut in half.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -49,85 +50,98 @@
         android:layout_weight="1"
         android:overScrollMode="never">
 
+        <!-- Speed, then pitch below it; held sideways the two sit side by side
+             (MobilePlaybackActivity.layoutSpeedSheetSideBySide). -->
         <LinearLayout
+            android:id="@+id/speed_sheet_body"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:paddingHorizontal="16dp">
 
-            <TextView
-                android:id="@+id/speed_sheet_value"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:accessibilityLiveRegion="polite"
-                android:fontFamily="sans-serif-medium"
-                android:gravity="center"
-                android:textColor="@color/mobile_color_on_surface"
-                android:textSize="32sp"
-                tools:text="1.25x" />
-
             <LinearLayout
+                android:id="@+id/speed_sheet_speed"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="vertical">
 
-                <ImageButton
-                    android:id="@+id/speed_sheet_slower"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:background="@drawable/bg_mobile_speed_step"
-                    android:contentDescription="@string/mobile_speed_slower"
-                    android:src="@drawable/ic_mobile_remove" />
-
-                <com.google.android.material.slider.Slider
-                    android:id="@+id/speed_sheet_slider"
-                    android:layout_width="0dp"
+                <TextView
+                    android:id="@+id/speed_sheet_value"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:contentDescription="@string/mobile_player_speed"
-                    android:stepSize="0.05"
-                    android:valueFrom="0.25"
-                    android:valueTo="4.0"
-                    app:haloColor="@color/mobile_color_divider"
-                    app:labelBehavior="gone"
-                    app:thumbColor="@color/mobile_color_on_surface"
-                    app:tickVisible="false"
-                    app:trackColorActive="@color/mobile_color_on_surface"
-                    app:trackColorInactive="@color/mobile_color_divider" />
+                    android:layout_marginTop="16dp"
+                    android:accessibilityLiveRegion="polite"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:textColor="@color/mobile_color_on_surface"
+                    android:textSize="32sp"
+                    tools:text="1.25x" />
 
-                <ImageButton
-                    android:id="@+id/speed_sheet_faster"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:background="@drawable/bg_mobile_speed_step"
-                    android:contentDescription="@string/mobile_speed_faster"
-                    android:src="@drawable/ic_mobile_add" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageButton
+                        android:id="@+id/speed_sheet_slower"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/bg_mobile_speed_step"
+                        android:contentDescription="@string/mobile_speed_slower"
+                        android:src="@drawable/ic_mobile_remove" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/speed_sheet_slider"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:contentDescription="@string/mobile_player_speed"
+                        android:stepSize="0.05"
+                        android:valueFrom="0.25"
+                        android:valueTo="4.0"
+                        app:haloColor="@color/mobile_color_divider"
+                        app:labelBehavior="gone"
+                        app:thumbColor="@color/mobile_color_on_surface"
+                        app:tickVisible="false"
+                        app:trackColorActive="@color/mobile_color_on_surface"
+                        app:trackColorInactive="@color/mobile_color_divider" />
+
+                    <ImageButton
+                        android:id="@+id/speed_sheet_faster"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/bg_mobile_speed_step"
+                        android:contentDescription="@string/mobile_speed_faster"
+                        android:src="@drawable/ic_mobile_add" />
+
+                </LinearLayout>
+
+                <!-- Preset pills, one per SPEED_CHIPS entry (item_mobile_speed_chip). -->
+                <LinearLayout
+                    android:id="@+id/speed_sheet_chips"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal" />
 
             </LinearLayout>
 
-            <!-- Preset pills, one per SPEED_CHIPS entry (item_mobile_speed_chip). -->
-            <LinearLayout
-                android:id="@+id/speed_sheet_chips"
+            <!-- Goes with the pitch section (hidden with it). -->
+            <View
+                android:id="@+id/speed_sheet_divider"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:orientation="horizontal" />
+                android:layout_height="1dp"
+                android:layout_marginHorizontal="-16dp"
+                android:layout_marginTop="20dp"
+                android:background="@color/mobile_color_divider" />
 
             <LinearLayout
                 android:id="@+id/speed_sheet_pitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
                 android:orientation="vertical">
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginHorizontal="-16dp"
-                    android:background="@color/mobile_color_divider" />
 
                 <LinearLayout
                     android:layout_width="match_parent"

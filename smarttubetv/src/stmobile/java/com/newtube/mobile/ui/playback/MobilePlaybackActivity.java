@@ -7641,6 +7641,9 @@ public class MobilePlaybackActivity extends MobileActivity
 
         bindSpeedControls(content, current);
         bindPitchControls(content);
+        if (isLandscape()) {
+            layoutSpeedSheetSideBySide(content);
+        }
 
         // Full TV speed dialog: extended 0.25-4x list (long-click path always opens the list).
         content.findViewById(R.id.speed_sheet_more).setOnClickListener(v -> {
@@ -7731,6 +7734,7 @@ public class MobilePlaybackActivity extends MobileActivity
         if (mExoPlayerController == null
                 || !PlayerTweaksData.instance(this).isAudioTimeStretchingEnabled()) {
             section.setVisibility(View.GONE);
+            content.findViewById(R.id.speed_sheet_divider).setVisibility(View.GONE);
             return;
         }
         TextView value = content.findViewById(R.id.speed_sheet_pitch_value);
@@ -7784,6 +7788,28 @@ public class MobilePlaybackActivity extends MobileActivity
         reset.setOnClickListener(v -> pick.accept(100));
 
         show[0].run();
+    }
+
+    /**
+     * NEWTUBE(speed-sheet, sheet-landscape): held sideways, speed and pitch side by side, split by
+     * an upright hairline. Stacked, the sheet is about 425dp tall against a landscape cap near
+     * 360dp (showPlayerSheet), and the cap's peek fit cut the preset pills in half with pitch below
+     * the fold. Side by side it is about 325dp. Speed keeps three fifths of the sheet's 640dp so
+     * its six pills stay legible; pitch, when hidden, leaves it the whole width.
+     */
+    private void layoutSpeedSheetSideBySide(View content) {
+        LinearLayout body = content.findViewById(R.id.speed_sheet_body);
+        body.setOrientation(LinearLayout.HORIZONTAL);
+        content.findViewById(R.id.speed_sheet_speed).setLayoutParams(new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 3f));
+        LinearLayout.LayoutParams divider = new LinearLayout.LayoutParams(
+                dp(1), LinearLayout.LayoutParams.MATCH_PARENT);
+        divider.setMargins(dp(20), dp(16), dp(20), 0);
+        content.findViewById(R.id.speed_sheet_divider).setLayoutParams(divider);
+        LinearLayout.LayoutParams pitch = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 2f);
+        pitch.topMargin = dp(8);
+        content.findViewById(R.id.speed_sheet_pitch).setLayoutParams(pitch);
     }
 
     /**

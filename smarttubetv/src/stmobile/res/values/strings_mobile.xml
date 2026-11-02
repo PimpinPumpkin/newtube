@@ -192,6 +192,13 @@
     <string name="mobile_speed_normal" tools:ignore="UnusedResources">Normal</string>
     <string name="mobile_speed_more">More speeds</string>
     <string name="mobile_speed_toast">Playback speed: %1$s</string>
+    <string name="mobile_speed_slower">Slower</string>
+    <string name="mobile_speed_faster">Faster</string>
+    <string name="mobile_pitch">Pitch</string>
+    <string name="mobile_pitch_value">%1$d%%</string>
+    <string name="mobile_pitch_lower">Lower pitch</string>
+    <string name="mobile_pitch_higher">Higher pitch</string>
+    <string name="mobile_pitch_reset">Reset</string>
     <string name="mobile_signin_title">Sign in</string>
     <string name="mobile_signin_lead">Connect your Google account to get your subscriptions, playlists and history.</string>
     <string name="mobile_signin_step1_title">Tap \u201cContinue with Google\u201d</string>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- NEWTUBE(speed-sheet): a preset speed pill; the active speed's is filled (inverse surface). -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/mobile_color_divider">
+    <item>
+        <selector>
+            <item android:state_selected="true">
+                <shape android:shape="rectangle">
+                    <solid android:color="@color/mobile_color_inverse_surface" />
+                    <corners android:radius="18dp" />
+                </shape>
+            </item>
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="@color/mobile_color_pill" />
+                    <corners android:radius="18dp" />
+                </shape>
+            </item>
+        </selector>
+    </item>
+</ripple>

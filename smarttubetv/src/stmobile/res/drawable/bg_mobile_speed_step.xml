@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- NEWTUBE(speed-sheet): the round -/+ buttons beside the speed and pitch sliders. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/mobile_color_divider">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/mobile_color_pill" />
+        </shape>
+    </item>
+</ripple>

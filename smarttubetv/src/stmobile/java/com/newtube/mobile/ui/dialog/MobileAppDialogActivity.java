@@ -1,5 +1,6 @@
 package com.newtube.mobile.ui.dialog;
 
+import android.annotation.SuppressLint;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Build;
@@ -8,6 +9,7 @@ import android.os.Parcelable;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.view.ViewGroup;
@@ -22,6 +24,10 @@ import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.dynamicanimation.animation.DynamicAnimation;
+import androidx.dynamicanimation.animation.FlingAnimation;
+import androidx.dynamicanimation.animation.SpringAnimation;
+import androidx.dynamicanimation.animation.SpringForce;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -111,7 +117,12 @@ public class MobileAppDialogActivity extends MobileActivity implements AppDialog
     }
 
     private AppDialogPresenter mPresenter;
-    private FrameLayout mRoot;
+    private SheetDragFrame mRoot;
+    /** NEWTUBE(sheet-drag): the release animation running on the sheet, if any. */
+    @Nullable private DynamicAnimation<?> mDragAnim;
+    /** NEWTUBE(sheet-drag): a drag is moving the sheet; {@link #mDragBase} is where it began. */
+    private boolean mDragActive;
+    private float mDragBase;
     private View mScrim;
     private LinearLayout mContent;
     private View mHandle;
@@ -239,6 +250,7 @@ public class MobileAppDialogActivity extends MobileActivity implements AppDialog
         mPresenter.onViewInitialized();
     }
 
+    @SuppressLint("ClickableViewAccessibility") // the sheet's touch listener only claims the down
     private void bindViews() {
         mRoot = findViewById(R.id.mobile_dialog_root);
         mScrim = findViewById(R.id.mobile_dialog_scrim);
@@ -251,6 +263,11 @@ public class MobileAppDialogActivity extends MobileActivity implements AppDialog
 
         // Sheet mode: tapping the dim scrim dismisses the whole dialog (like a Material sheet).
         mScrim.setOnClickListener(v -> dismissSheet());
+        // NEWTUBE(sheet-drag): the sheet keeps its own touches. Nothing on its handle, title or
+        // bottom inset takes the down, so a tap there fell through to the scrim and closed the
+        // sheet, and so did a sideways swipe on the header. A touch listener, not a click one:
+        // TalkBack must not announce the whole sheet as a button.
+        mContent.setOnTouchListener((v, event) -> event.getActionMasked() == MotionEvent.ACTION_DOWN);
 
         ViewCompat.setOnApplyWindowInsetsListener(mRoot, (view, windowInsets) -> {
             mSystemInsets = windowInsets.getInsets(
@@ -421,6 +438,19 @@ public class MobileAppDialogActivity extends MobileActivity implements AppDialog
                     .setAppearanceLightStatusBars(false);
         }
 
+        // NEWTUBE(sheet-drag): drag the sheet down to close it, Vela's feel (SheetFling).
+        mRoot.setSheet(mContent, mRecyclerView, new SheetDragFrame.Listener() {
+            @Override
+            public void onDrag(float dy) {
+                onSheetDrag(dy);
+            }
+
+            @Override
+            public void onRelease(float velocity) {
+                onSheetRelease(velocity);
+            }
+        });
+
         // Anchor the content to the bottom and size it to its content.
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) mContent.getLayoutParams();
         lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
@@ -476,6 +506,7 @@ public class MobileAppDialogActivity extends MobileActivity implements AppDialog
             return false;
         }
         mExiting = true;
+        cancelDragAnim();
         mScrim.animate().cancel();
         mScrim.animate().alpha(0f).setDuration(Motion.EXIT_MS).setInterpolator(Motion.STANDARD).start();
         mContent.animate().cancel();
@@ -483,6 +514,118 @@ public class MobileAppDialogActivity extends MobileActivity implements AppDialog
                 .setInterpolator(Motion.EMPHASIZED_ACCELERATE)
                 .withEndAction(this::finishAfterExit).start();
         return true;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // NEWTUBE(sheet-drag): drag the sheet down to close it
+    // ---------------------------------------------------------------------------------
+
+    /** The finger moves the sheet 1:1; up past open it resists. The scrim fades as it goes. */
+    private void onSheetDrag(float dy) {
+        if (mExiting || mContent == null) {
+            return;
+        }
+        if (!mDragActive) {
+            // Cancel before setting the flag: cancelDragAnim() clears it, and a cleared flag made
+            // every move re-read the base from the already moved sheet and add the whole travel
+            // again, so the sheet ran away from the finger.
+            cancelDragAnim();
+            mDragActive = true;
+            mContent.animate().cancel(); // a drag can catch the sheet mid-entrance
+            mScrim.animate().cancel();
+            mDragBase = mContent.getTranslationY();
+        }
+        setSheetOffset(SheetFling.dragOffset(mDragBase, dy, mContent.getHeight()));
+    }
+
+    /**
+     * Vela's release: project the throw; a downward flick, or a throw that coasts past half the
+     * sheet, closes it, riding its own inertia off the screen when the coast gets there. Anything
+     * else springs back open, carrying the finger's speed.
+     */
+    private void onSheetRelease(float velocity) {
+        mDragActive = false;
+        if (mExiting || mContent == null) {
+            return;
+        }
+        float offset = mContent.getTranslationY();
+        float height = mContent.getHeight();
+        // The system density, not this activity's: that carries the UI scale override (CLAUDE.md).
+        float density = getApplicationContext().getResources().getConfiguration().densityDpi / 160f;
+        if (SheetFling.closes(offset, velocity, height, density)) {
+            closeByDrag(offset, velocity, height);
+        } else {
+            springSheetTo(0f, velocity, null);
+        }
+    }
+
+    private void closeByDrag(float offset, float velocity, float height) {
+        if (mPresenter != null && mPresenter.getView() == this) {
+            mPresenter.onFinish();
+        }
+        mLevels.clear();
+        mExiting = true;
+        Runnable done = this::finishAfterExit;
+        if (SheetFling.coastsTo(offset, velocity, height)) {
+            // No spring snap: the sheet rides the throw's inertia and the screen edge stops it.
+            // The bounds hold the start value: FlingAnimation.start() throws outside them.
+            FlingAnimation fling = new FlingAnimation(mContent, DynamicAnimation.TRANSLATION_Y)
+                    .setStartVelocity(velocity)
+                    .setFriction(SheetFling.FRICTION)
+                    .setMinValue(Math.min(offset, 0f))
+                    .setMaxValue(Math.max(offset, height));
+            fling.addUpdateListener((anim, value, v) -> followScrim(value));
+            fling.addEndListener((anim, canceled, value, v) -> {
+                if (canceled) {
+                    return;
+                }
+                if (value < height - 1f) {
+                    springSheetTo(height, v, done);
+                } else {
+                    done.run();
+                }
+            });
+            mDragAnim = fling;
+            fling.start();
+        } else {
+            springSheetTo(height, velocity, done);
+        }
+    }
+
+    /** Vela's settle: no bounce, stiffness 350, starting at the finger's speed. */
+    private void springSheetTo(float target, float velocity, @Nullable Runnable onEnd) {
+        cancelDragAnim();
+        SpringAnimation spring = new SpringAnimation(mContent, DynamicAnimation.TRANSLATION_Y, target);
+        spring.getSpring().setStiffness(350f).setDampingRatio(SpringForce.DAMPING_RATIO_NO_BOUNCY);
+        spring.setStartVelocity(velocity);
+        spring.addUpdateListener((anim, value, v) -> followScrim(value));
+        spring.addEndListener((anim, canceled, value, v) -> {
+            if (!canceled && onEnd != null) {
+                onEnd.run();
+            }
+        });
+        mDragAnim = spring;
+        spring.start();
+    }
+
+    private void setSheetOffset(float offset) {
+        mContent.setTranslationY(offset);
+        followScrim(offset);
+    }
+
+    /** The scrim is as dark as the sheet is open. */
+    private void followScrim(float offset) {
+        int height = mContent.getHeight();
+        float open = height > 0 ? 1f - Math.max(0f, Math.min(1f, offset / height)) : 1f;
+        mScrim.setAlpha(open);
+    }
+
+    private void cancelDragAnim() {
+        mDragActive = false;
+        if (mDragAnim != null) {
+            mDragAnim.cancel();
+            mDragAnim = null;
+        }
     }
 
     private void finishAfterExit() {
@@ -498,6 +641,7 @@ public class MobileAppDialogActivity extends MobileActivity implements AppDialog
      * with its own entrance (Codex review of this change).
      */
     private void cancelSheetExit() {
+        cancelDragAnim();
         mExiting = false;
         mScrim.animate().cancel();
         mScrim.setAlpha(1f);
@@ -561,6 +705,8 @@ public class MobileAppDialogActivity extends MobileActivity implements AppDialog
         if (isChangingConfigurations() && !mLevels.isEmpty()) {
             sRecreation = new RecreationState(new ArrayList<>(mLevels), new HashMap<>(mRadioOverrides), mIsTransparent);
         }
+        // NEWTUBE(sheet-drag): a spring or fling still running would finish a destroyed activity.
+        cancelDragAnim();
 
         super.onDestroy();
     }

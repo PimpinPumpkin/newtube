@@ -1189,11 +1189,20 @@ public class MobilePlaybackActivity extends MobileActivity
         }
     }
 
-    /** NEWTUBE(clock): the time shows in fullscreen while Settings > Player has it on. */
+    /**
+     * NEWTUBE(clock): the time shows in fullscreen while Settings > Player has it on, unless the
+     * status bar shows its own clock anyway (fullscreen in split screen, bars swiped in).
+     */
     private void updateClockVisibility(boolean fullscreen) {
         if (mClockView != null) {
-            mClockView.setVisibility(fullscreen && PlayerClockPrefs.isClockOn(this) ? View.VISIBLE : View.GONE);
+            boolean show = fullscreen && !isStatusBarShown() && PlayerData.instance(this).isClockEnabled();
+            mClockView.setVisibility(show ? View.VISIBLE : View.GONE);
         }
+    }
+
+    private boolean isStatusBarShown() {
+        WindowInsetsCompat insets = mControlsRoot != null ? ViewCompat.getRootWindowInsets(mControlsRoot) : null;
+        return insets != null && insets.isVisible(WindowInsetsCompat.Type.statusBars());
     }
 
     /**
@@ -2231,6 +2240,7 @@ public class MobilePlaybackActivity extends MobileActivity
         bleedScrim(mTopScrim, left, top, right, 0);
         bleedScrim(mBottomScrim, left, 0, right, bottom);
         applySeekBarLayout(left, top, right, bottom);
+        updateClockVisibility(isLandscape()); // NEWTUBE(clock): the status bar came or went
     }
 
     /**
@@ -4231,7 +4241,7 @@ public class MobilePlaybackActivity extends MobileActivity
                 : getString(R.string.mobile_quality_auto_short);
     }
 
-    /** Trailing value for the Speed row: "Normal", "1.5x", ... */
+    /** Trailing value for the Speed row and the top bar's speed chip: "1x", "1.5x", ... */
     private String currentSpeedLabel() {
         float speed = mExoPlayerController != null ? mExoPlayerController.getSpeed() : -1;
         return speedLabel(speed <= 0 ? 1f : speed);
